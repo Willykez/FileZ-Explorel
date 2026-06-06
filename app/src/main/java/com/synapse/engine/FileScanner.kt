@@ -1,30 +1,24 @@
 package com.synapse.engine
 
-import android.os.Environment
 import java.io.File
 import java.util.concurrent.Executors
 
+/** Simple background directory scanner (used for search). */
 class FileScanner(private val onFileFound: (File) -> Unit) {
     private val executor = Executors.newSingleThreadExecutor()
 
-    fun startScan() {
-        executor.execute {
-            val root = Environment.getExternalStorageDirectory()
-            scanDirectory(root)
-        }
+    fun scanDirectory(root: File) {
+        executor.execute { walkDir(root) }
     }
 
-    private fun scanDirectory(dir: File) {
-        val files = dir.listFiles() ?: return
-        for (file in files) {
-            onFileFound(file)
-            if (file.isDirectory && !file.name.startsWith(".")) {
-                scanDirectory(file)
+    private fun walkDir(dir: File) {
+        try {
+            dir.listFiles()?.forEach { file ->
+                onFileFound(file)
+                if (file.isDirectory && !file.name.startsWith(".")) walkDir(file)
             }
-        }
+        } catch (e: SecurityException) { /* skip */ }
     }
 
-    fun stop() {
-        executor.shutdownNow()
-    }
+    fun stop() = executor.shutdownNow()
 }
