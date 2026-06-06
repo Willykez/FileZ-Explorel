@@ -6,22 +6,23 @@ import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-class ArchiveManager {
-    fun createZip(files: List<File>, zipFile: File) {
-        ZipOutputStream(FileOutputStream(zipFile)).use { out ->
-            for (file in files) {
-                if (file.isDirectory) continue
-                FileInputStream(file).use { fi ->
-                    val entry = ZipEntry(file.name)
-                    out.putNextEntry(entry)
-                    val buffer = ByteArray(4096)
-                    var len: Int
-                    while (fi.read(buffer).also { len = it } > 0) {
-                        out.write(buffer, 0, len)
+object ArchiveManager {
+    fun createZip(files: List<File>, zipFile: File): Boolean {
+        return try {
+            ZipOutputStream(FileOutputStream(zipFile)).use { out ->
+                files.forEach { file ->
+                    if (file.isFile) {
+                        FileInputStream(file).use { fi ->
+                            out.putNextEntry(ZipEntry(file.name))
+                            val buf = ByteArray(8192)
+                            var len: Int
+                            while (fi.read(buf).also { len = it } > 0) out.write(buf, 0, len)
+                            out.closeEntry()
+                        }
                     }
-                    out.closeEntry()
                 }
             }
-        }
+            true
+        } catch (e: Exception) { false }
     }
 }
