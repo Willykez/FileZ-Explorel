@@ -1,0 +1,11 @@
+# Synapse ProGuard Rules
+-keep class com.synapse.engine.MainActivity { *; }
+-keep class com.synapse.engine.SpatialCanvasView { *; }
+-keep class com.synapse.engine.DataManager { *; }
+-keep class com.synapse.engine.PhysicsEngine { *; }
+-keep class com.synapse.engine.IconGenerator { *; }
+-keep class com.synapse.engine.FileScanner { *; }
+-keep class com.synapse.engine.MediaEngine { *; }
+-keep class com.synapse.engine.FileOperations { *; }
+-keep class com.synapse.engine.ArchiveManager { *; }
+-keep class com.synapse.engine.GhostLocker { *; }
