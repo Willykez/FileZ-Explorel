@@ -30,7 +30,7 @@ class ExplorerView(context: Context) : View(context) {
         openDirectory(dir)
     }
 
-    private val gridPanel = FileGridPanel(
+    private val gridPanel: FileGridPanel = FileGridPanel(
     onFileOpen = { file: FileModel ->
         if (file.isDirectory) openDirectory(file.file)
     },
@@ -40,7 +40,7 @@ class ExplorerView(context: Context) : View(context) {
     }
 )
 
-    private val actionBar = ActionBar(
+    private val actionBar: ActionBar = ActionBar(
         onCopy = { files -> handleCopy(files) },
         onMove = { files -> handleMove(files) },
         onDelete = { files -> handleDelete(files) },
