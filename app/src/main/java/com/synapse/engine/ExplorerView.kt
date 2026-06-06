@@ -31,16 +31,14 @@ class ExplorerView(context: Context) : View(context) {
     }
 
     private val gridPanel = FileGridPanel(
-        onFileOpen = { file ->
-            if (file.isDirectory) {
-                openDirectory(file.file)
-            }
-        },
-        onSelectionChanged = { selected ->
-            actionBar.update(selected)
-            mainHandler.post { invalidate() }
-        }
-    )
+    onFileOpen = { file: FileModel ->
+        if (file.isDirectory) openDirectory(file.file)
+    },
+    onSelectionChanged = { selected: List<FileModel> ->
+        actionBar.update(selected)
+        mainHandler.post { invalidate() }
+    }
+)
 
     private val actionBar = ActionBar(
         onCopy = { files -> handleCopy(files) },
