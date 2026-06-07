@@ -13,41 +13,34 @@ import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * The single custom View that owns the entire UI.
- * Draws: FolderTreePanel (left) | FileGridPanel (right) | ActionBar (bottom).
+ * Single custom View owning the entire UI.
+ * Left: FolderTreePanel  |  Right: FileGridPanel  |  Bottom: ActionBar
  */
 class ExplorerView(context: Context) : View(context) {
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val paint       = Paint(Paint.ANTI_ALIAS_FLAG)
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val ioExecutor = Executors.newSingleThreadExecutor()
+    private val ioExecutor  = Executors.newSingleThreadExecutor()
 
-    // Navigation stack
     private val navStack = ArrayDeque<File>()
 
-    // Panels
-    private val treePanel = FolderTreePanel { dir ->
-        openDirectory(dir)
-    }
+    private val treePanel = FolderTreePanel { dir -> openDirectory(dir) }
 
-    private val gridPanel: FileGridPanel = FileGridPanel(
-    onFileOpen = { file: FileModel ->
-        if (file.isDirectory) openDirectory(file.file)
-    },
-    onSelectionChanged = { selected: List<FileModel> ->
-        actionBar.update(selected)
-        mainHandler.post { invalidate() }
-    }
-)
-
-    private val actionBar: ActionBar = ActionBar(
-        onCopy = { files -> handleCopy(files) },
-        onMove = { files -> handleMove(files) },
-        onDelete = { files -> handleDelete(files) },
-        onDeselect = {
-            gridPanel.clearSelection()
-            invalidate()
+    private val gridPanel = FileGridPanel(
+        onFileOpen = { file ->
+            if (file.isDirectory) openDirectory(file.file)
+        },
+        onSelectionChanged = { selected ->
+            actionBar.update(selected)
+            mainHandler.post { invalidate() }
         }
+    )
+
+    private val actionBar = ActionBar(
+        onCopy     = { files -> handleCopy(files) },
+        onMove     = { files -> handleMove(files) },
+        onDelete   = { files -> handleDelete(files) },
+        onDeselect = { gridPanel.clearSelection(); invalidate() }
     )
 
     private val gestureDetector = GestureDetector(context,
@@ -60,11 +53,9 @@ class ExplorerView(context: Context) : View(context) {
             }
         })
 
-    private var activePanel: String? = null // "tree" | "grid"
-
-    // ── Pending operations (Copy/Move clipboard) ────────────────────────────
+    private var activePanel: String? = null
     private var clipboardFiles = listOf<FileModel>()
-    private var clipboardMode  = ""   // "copy" | "move"
+    private var clipboardMode  = ""
 
     init {
         setBackgroundColor(Theme.BG_BASE)
@@ -78,9 +69,7 @@ class ExplorerView(context: Context) : View(context) {
     }
 
     private fun openDirectory(dir: File) {
-        if (navStack.isEmpty() || navStack.last() != dir) {
-            navStack.addLast(dir)
-        }
+        if (navStack.isEmpty() || navStack.last() != dir) navStack.addLast(dir)
         treePanel.selectFolder(dir)
         gridPanel.loadDirectory(dir)
         mainHandler.post { invalidate() }
@@ -96,43 +85,42 @@ class ExplorerView(context: Context) : View(context) {
         return true
     }
 
-    // ── Layout ───────────────────────────────────────────────────────────────
+    // ── Layout ────────────────────────────────────────────────────────────────
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        val treePanelW = w * 0.28f
-        treePanel.left = 0f
-        treePanel.top = 0f
-        treePanel.width = treePanelW
+        val treeW   = w * 0.28f
+        val actionH = actionBar.height
+
+        treePanel.left   = 0f
+        treePanel.top    = 0f
+        treePanel.width  = treeW
         treePanel.height = h.toFloat()
 
-        val actionH = actionBar.height
-        gridPanel.left = treePanelW + 1f
-        gridPanel.top = 0f
-        gridPanel.width = w - treePanelW - 1f
+        gridPanel.left   = treeW + 1f
+        gridPanel.top    = 0f
+        gridPanel.width  = w - treeW - 1f
         gridPanel.height = h.toFloat()
 
-        actionBar.left = treePanelW + 1f
-        actionBar.top = h - actionH
-        actionBar.width = w - treePanelW - 1f
+        actionBar.left  = treeW + 1f
+        actionBar.top   = h - actionH
+        actionBar.width = w - treeW - 1f
     }
 
-    // ── Draw ─────────────────────────────────────────────────────────────────
+    // ── Draw ──────────────────────────────────────────────────────────────────
 
     override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
         treePanel.draw(canvas)
         gridPanel.draw(canvas)
         if (actionBar.visible) actionBar.draw(canvas)
-        // Continuously redraw only if loading
-        if (gridPanel.contains(width / 2f, height / 2f)) postInvalidateDelayed(100)
+        // Re-draw while loading
+        postInvalidateDelayed(150)
     }
 
-    // ── Touch ────────────────────────────────────────────────────────────────
+    // ── Touch ─────────────────────────────────────────────────────────────────
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         gestureDetector.onTouchEvent(event)
-
         val x = event.x
         val y = event.y
 
@@ -141,7 +129,7 @@ class ExplorerView(context: Context) : View(context) {
                 activePanel = when {
                     actionBar.contains(x, y) -> "action"
                     treePanel.contains(x, y) -> "tree"
-                    else -> "grid"
+                    else                     -> "grid"
                 }
                 when (activePanel) {
                     "tree" -> treePanel.onTouchDown(x, y)
@@ -155,11 +143,10 @@ class ExplorerView(context: Context) : View(context) {
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                val consumed = when (activePanel) {
+                when (activePanel) {
                     "action" -> actionBar.onTouchUp(x, y)
                     "tree"   -> treePanel.onTouchUp(x, y)
                     "grid"   -> gridPanel.onTouchUp(x, y)
-                    else     -> false
                 }
                 activePanel = null
                 invalidate()
@@ -168,31 +155,30 @@ class ExplorerView(context: Context) : View(context) {
         return true
     }
 
-    // ── File Operations ──────────────────────────────────────────────────────
+    // ── File Operations ───────────────────────────────────────────────────────
 
     private fun handleCopy(files: List<FileModel>) {
         clipboardFiles = files
-        clipboardMode = "copy"
+        clipboardMode  = "copy"
         gridPanel.clearSelection()
-        showToast("${files.size} file(s) copied to clipboard. Navigate to destination and paste.")
+        toast("${files.size} item(s) copied. Navigate to destination.")
     }
 
     private fun handleMove(files: List<FileModel>) {
         clipboardFiles = files
-        clipboardMode = "move"
+        clipboardMode  = "move"
         gridPanel.clearSelection()
-        showToast("${files.size} file(s) cut. Navigate to destination and paste.")
+        toast("${files.size} item(s) cut. Navigate to destination.")
     }
 
     private fun handleDelete(files: List<FileModel>) {
-        val ctx = context
         mainHandler.post {
-            AlertDialog.Builder(ctx)
-                .setTitle("Delete ${files.size} file(s)?")
+            AlertDialog.Builder(context)
+                .setTitle("Delete ${files.size} item(s)?")
                 .setMessage("This cannot be undone.")
                 .setPositiveButton("Delete") { _, _ ->
                     ioExecutor.execute {
-                        files.forEach { deleteRecursive(it.file) }
+                        files.forEach { FileOperations.deleteRecursive(it.file) }
                         mainHandler.post {
                             gridPanel.clearSelection()
                             gridPanel.refresh()
@@ -205,12 +191,7 @@ class ExplorerView(context: Context) : View(context) {
         }
     }
 
-    private fun deleteRecursive(file: File) {
-        if (file.isDirectory) file.listFiles()?.forEach { deleteRecursive(it) }
-        file.delete()
-    }
-
-    private fun showToast(msg: String) {
+    private fun toast(msg: String) {
         mainHandler.post {
             android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
         }
