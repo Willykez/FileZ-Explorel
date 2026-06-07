@@ -18,32 +18,38 @@ import java.util.concurrent.Executors
  */
 class ExplorerView(context: Context) : View(context) {
 
-    private val paint       = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val ioExecutor  = Executors.newSingleThreadExecutor()
+    private val paint: Paint       = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val mainHandler: Handler = Handler(Looper.getMainLooper())
+    private val ioExecutor          = Executors.newSingleThreadExecutor()
 
-    private val navStack = ArrayDeque<File>()
+    private val navStack: ArrayDeque<File> = ArrayDeque()
 
-    private val treePanel = FolderTreePanel { dir -> openDirectory(dir) }
+    // Declare panels first with explicit types so Kotlin never needs to infer recursively
+    private val treePanel: FolderTreePanel = FolderTreePanel { dir -> openDirectory(dir) }
 
-    private val gridPanel = FileGridPanel(
-        onFileOpen = { file ->
+    private val gridPanel: FileGridPanel = FileGridPanel(
+        onFileOpen = { file: FileModel ->
             if (file.isDirectory) openDirectory(file.file)
         },
-        onSelectionChanged = { selected ->
+        onSelectionChanged = { selected: List<FileModel> ->
             actionBar.update(selected)
             mainHandler.post { invalidate() }
         }
     )
 
-    private val actionBar = ActionBar(
-        onCopy     = { files -> handleCopy(files) },
-        onMove     = { files -> handleMove(files) },
-        onDelete   = { files -> handleDelete(files) },
-        onDeselect = { gridPanel.clearSelection(); invalidate() }
+    // actionBar declared after gridPanel so its lambda body can safely reference gridPanel
+    private val actionBar: ActionBar = ActionBar(
+        onCopy     = { files: List<FileModel> -> handleCopy(files) },
+        onMove     = { files: List<FileModel> -> handleMove(files) },
+        onDelete   = { files: List<FileModel> -> handleDelete(files) },
+        onDeselect = {
+            gridPanel.clearSelection()
+            invalidate()
+        }
     )
 
-    private val gestureDetector = GestureDetector(context,
+    private val gestureDetector: GestureDetector = GestureDetector(
+        context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onLongPress(e: MotionEvent) {
                 if (gridPanel.contains(e.x, e.y)) {
@@ -51,15 +57,18 @@ class ExplorerView(context: Context) : View(context) {
                     invalidate()
                 }
             }
-        })
+        }
+    )
 
     private var activePanel: String? = null
-    private var clipboardFiles = listOf<FileModel>()
-    private var clipboardMode  = ""
+    private var clipboardFiles: List<FileModel> = emptyList()
+    private var clipboardMode: String = ""
 
     init {
         setBackgroundColor(Theme.BG_BASE)
     }
+
+    // ── Public API ────────────────────────────────────────────────────────────
 
     fun loadRoot() {
         mainHandler.post {
@@ -68,6 +77,18 @@ class ExplorerView(context: Context) : View(context) {
         }
     }
 
+    fun navigateUp(): Boolean {
+        if (navStack.size <= 1) return false
+        navStack.removeLast()
+        val parent: File = navStack.last()
+        treePanel.selectFolder(parent)
+        gridPanel.loadDirectory(parent)
+        invalidate()
+        return true
+    }
+
+    // ── Internal navigation ───────────────────────────────────────────────────
+
     private fun openDirectory(dir: File) {
         if (navStack.isEmpty() || navStack.last() != dir) navStack.addLast(dir)
         treePanel.selectFolder(dir)
@@ -75,22 +96,12 @@ class ExplorerView(context: Context) : View(context) {
         mainHandler.post { invalidate() }
     }
 
-    fun navigateUp(): Boolean {
-        if (navStack.size <= 1) return false
-        navStack.removeLast()
-        val parent = navStack.last()
-        treePanel.selectFolder(parent)
-        gridPanel.loadDirectory(parent)
-        invalidate()
-        return true
-    }
-
     // ── Layout ────────────────────────────────────────────────────────────────
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        val treeW   = w * 0.28f
-        val actionH = actionBar.height
+        val treeW: Float   = w * 0.28f
+        val actionH: Float = actionBar.height
 
         treePanel.left   = 0f
         treePanel.top    = 0f
@@ -103,7 +114,7 @@ class ExplorerView(context: Context) : View(context) {
         gridPanel.height = h.toFloat()
 
         actionBar.left  = treeW + 1f
-        actionBar.top   = h - actionH
+        actionBar.top   = h.toFloat() - actionH
         actionBar.width = w - treeW - 1f
     }
 
@@ -113,7 +124,6 @@ class ExplorerView(context: Context) : View(context) {
         treePanel.draw(canvas)
         gridPanel.draw(canvas)
         if (actionBar.visible) actionBar.draw(canvas)
-        // Re-draw while loading
         postInvalidateDelayed(150)
     }
 
@@ -121,8 +131,8 @@ class ExplorerView(context: Context) : View(context) {
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         gestureDetector.onTouchEvent(event)
-        val x = event.x
-        val y = event.y
+        val x: Float = event.x
+        val y: Float = event.y
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
