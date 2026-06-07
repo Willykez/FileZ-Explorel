@@ -267,8 +267,8 @@ class FileGridPanel(
             FileType.IMAGE    -> DrawUtils.drawImageIcon(canvas, paint, path, iconCX, iconCY, ICON_SIZE, color)
             FileType.VIDEO    -> DrawUtils.drawMediaIcon(canvas, paint, path, iconCX, iconCY, ICON_SIZE, color)
             FileType.AUDIO    -> DrawUtils.drawMediaIcon(canvas, paint, path, iconCX, iconCY, ICON_SIZE, color)
-            FileType.CODE     -> DrawUtils.drawCodeIcon(canvas, paint, iconCX, iconCY, ICON_SIZE, color)
-            FileType.APK      -> DrawUtils.drawApkIcon(canvas, paint, iconCX, iconCY, ICON_SIZE, color)
+            FileType.CODE     -> DrawUtils.drawCodeIcon(canvas, paint, path, iconCX, iconCY, ICON_SIZE, color)
+            FileType.APK      -> DrawUtils.drawApkIcon(canvas, paint, path, iconCX, iconCY, ICON_SIZE, color)
             else              -> DrawUtils.drawFileIcon(canvas, paint, path, iconCX, iconCY, ICON_SIZE, color)
         }
 
