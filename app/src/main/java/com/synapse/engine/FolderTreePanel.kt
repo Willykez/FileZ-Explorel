@@ -245,6 +245,26 @@ fun onTouchUp(x: Float, y: Float): Boolean {
     return false  
 }  
 
+// ── Add inside FolderTreePanel ──
+
+/**
+ * Selects a folder programmatically (for ExplorerView navigation)
+ */
+fun selectFolder(folder: File) {
+    selectedFile = folder
+
+    // Expand tree nodes leading to this folder
+    fun expandPath(node: TreeNode) {
+        if (folder.startsWith(node.file)) {
+            node.expanded = true
+            node.children?.forEach { expandPath(it) }
+        }
+    }
+    roots.forEach { expandPath(it) }
+
+    rebuildFlat()
+}
+
 private fun maxScroll(): Float {  
     val content = HEADER_H + QA_TITLE_H + quickItems.size * QA_ROW_H + 12f +  
                   TREE_TITLE_H + flatList.size * TREE_ROW_H + 32f  
