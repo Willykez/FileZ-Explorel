@@ -3,15 +3,13 @@ package com.synapse.engine
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.nio.channels.FileChannel
 
 object FileOperations {
 
     fun copyFile(source: File, dest: File): Boolean {
         return try {
-            if (source.isDirectory) {
-                copyDirectory(source, dest)
-            } else {
+            if (source.isDirectory) copyDirectory(source, dest)
+            else {
                 dest.parentFile?.mkdirs()
                 FileInputStream(source).channel.use { src ->
                     FileOutputStream(dest).channel.use { dst ->
@@ -33,9 +31,13 @@ object FileOperations {
         return true
     }
 
-    fun moveFile(source: File, dest: File): Boolean {
-        return if (source.renameTo(dest)) true
+    fun moveFile(source: File, dest: File): Boolean =
+        if (source.renameTo(dest)) true
         else copyFile(source, dest) && source.deleteRecursively()
+
+    fun renameFile(file: File, newName: String): Boolean {
+        val dest = File(file.parentFile ?: return false, newName)
+        return file.renameTo(dest)
     }
 
     fun deleteRecursive(file: File): Boolean = file.deleteRecursively()
