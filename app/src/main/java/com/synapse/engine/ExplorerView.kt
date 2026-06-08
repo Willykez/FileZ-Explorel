@@ -1,4 +1,3 @@
-Here
 
 package com.synapse.engine
 
