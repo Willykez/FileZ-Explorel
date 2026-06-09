@@ -4,157 +4,164 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
-import android.graphics.Typeface
+import kotlin.math.abs
 
-/**
- * Bottom action bar — appears when files are selected.
- * Shows: Copy | Move | Delete | Deselect.
- */
 class ActionBar(
-    private val onCopy:     (List<FileModel>) -> Unit,
-    private val onMove:     (List<FileModel>) -> Unit,
-    private val onDelete:   (List<FileModel>) -> Unit,
-    private val onDeselect: () -> Unit
+    private val onCopy:      (List<FileModel>) -> Unit,
+    private val onMove:      (List<FileModel>) -> Unit,
+    private val onDelete:    (List<FileModel>) -> Unit,
+    private val onRename:    (FileModel) -> Unit,
+    private val onArchive:   (List<FileModel>) -> Unit,
+    private val onDeselect:  () -> Unit,
+    private val onSelectAll: () -> Unit
 ) {
     var left   = 0f
     var top    = 0f
     var width  = 0f
-    val height = 88f
+    var height = 96f
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path  = Path()
+    private val rect  = RectF()
 
-    // Plain class (not data class) avoids function-reference equality issues
-    private inner class ActionButton(
-        val label: String,
-        val color: Int,
-        val bounds: RectF = RectF()
-    )
-
-    private val buttons = listOf(
-        ActionButton("Copy",   Theme.ACCENT),
-        ActionButton("Move",   Theme.WARNING),
-        ActionButton("Delete", Theme.DANGER),
-        ActionButton("None",   Theme.TEXT_MUTED)
-    )
-
-    private var selectedFiles = listOf<FileModel>()
+    private var selected = listOf<FileModel>()
     var visible = false
+        private set
 
-    fun update(selected: List<FileModel>) {
-        selectedFiles = selected
-        visible = selected.isNotEmpty()
+    private var btnScrollX    = 0f
+    private var btnDownX      = 0f
+    private var btnScrollStart = 0f
+    private var btnDragging   = false
+    private var totalBtnW     = 0f
+
+    private val BTN_H   = 58f
+    private val BTN_PAD = 10f
+    private val LABEL_W = 110f
+    private val CLOSE_W = 64f
+
+    private data class Btn(val label: String, val icon: Int, val color: Int, val w: Float)
+
+    private fun buildButtons(): List<Btn> {
+        val single = selected.size == 1
+        return buildList {
+            add(Btn("Copy",    0, Theme.ACCENT,        118f))
+            add(Btn("Cut",     1, Theme.WARNING,        108f))
+            add(Btn("Delete",  2, Theme.DANGER,         122f))
+            if (single) add(Btn("Rename", 3, Theme.PURPLE, 128f))
+            add(Btn("Archive", 4, Theme.COLOR_ARCHIVE,  138f))
+            add(Btn("All",     5, Theme.TEXT_SECONDARY, 102f))
+        }
+    }
+
+    fun update(sel: List<FileModel>) {
+        selected = sel; visible = sel.isNotEmpty(); btnScrollX = 0f
+        totalBtnW = buildButtons().sumOf { it.w.toDouble() }.toFloat() +
+                    (buildButtons().size - 1) * BTN_PAD
     }
 
     fun draw(canvas: Canvas) {
         if (!visible) return
-
-        // Background
-        DrawUtils.drawRoundRect(canvas, paint, left, top, left + width, top + height, 0f, Theme.BG_SURFACE)
-
-        // Top accent line
+        val r = left + width; val b = top + height
+        // Rounded-top background
+        path.reset(); rect.set(left, top, r, b)
+        path.addRoundRect(rect, floatArrayOf(22f,22f,22f,22f,0f,0f,0f,0f), Path.Direction.CW)
+        paint.color = Theme.BG_SURFACE2; paint.style = Paint.Style.FILL; canvas.drawPath(path, paint)
+        // Accent pill at top
         paint.color = Theme.ACCENT
-        paint.style = Paint.Style.FILL
-        canvas.drawRect(left, top, left + width, top + 2f, paint)
-
-        val count = selectedFiles.size
-        DrawUtils.drawText(canvas, paint,
-            "$count item${if (count != 1) "s" else ""} selected",
-            left + 22f, top + 54f, Theme.TEXT_SECONDARY, 24f)
-
-        // Buttons
-        val btnW = 148f
-        val btnH = 58f
-        val gap  = 10f
-        val totalW = buttons.size * btnW + (buttons.size - 1) * gap
-        var bx = left + width - totalW - 18f
-
+        canvas.drawRoundRect(left + width/2f - 36f, top + 6f, left + width/2f + 36f, top + 10f, 4f, 4f, paint)
+        // Count label
+        val count = selected.size
+        DrawUtils.drawText(canvas, paint, "$count item${if (count > 1) "s" else ""}",
+            left + 14f, top + height / 2f + 10f, Theme.TEXT_SECONDARY, 22f)
+        // Close button
+        val cy = top + height / 2f; val closeX = r - CLOSE_W / 2f
+        paint.color = Theme.BG_SURFACE3; paint.style = Paint.Style.FILL; canvas.drawCircle(closeX, cy, 24f, paint)
+        paint.color = Theme.TEXT_SECONDARY; paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2.8f; paint.strokeCap = Paint.Cap.ROUND
+        canvas.drawLine(closeX - 8f, cy - 8f, closeX + 8f, cy + 8f, paint)
+        canvas.drawLine(closeX + 8f, cy - 8f, closeX - 8f, cy + 8f, paint)
+        // Scrollable buttons
+        val aL = left + LABEL_W; val aR = r - CLOSE_W
+        canvas.save(); canvas.clipRect(aL, top, aR, b)
+        val buttons = buildButtons(); var bx = aL - btnScrollX; val by = top + (height - BTN_H) / 2f
         buttons.forEach { btn ->
-            val by = top + (height - btnH) / 2f
-            btn.bounds.set(bx, by, bx + btnW, by + btnH)
-
-            val bg = if (btn.label == "Delete") DrawUtils.adjustAlpha(Theme.DANGER, 35)
-                     else Theme.BG_SURFACE2
-            DrawUtils.drawRoundRect(canvas, paint, bx, by, bx + btnW, by + btnH, 10f, bg)
-
-            paint.color = btn.color
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.5f
-            canvas.drawRoundRect(bx, by, bx + btnW, by + btnH, 10f, 10f, paint)
-
-            val iconX = bx + 22f
-            val iconY = by + btnH / 2f
-            when (btn.label) {
-                "Copy"   -> drawCopyIcon(canvas, iconX, iconY)
-                "Move"   -> drawMoveIcon(canvas, iconX, iconY)
-                "Delete" -> drawDeleteIcon(canvas, iconX, iconY)
-                "None"   -> drawCloseIcon(canvas, iconX, iconY)
+            val br = bx + btn.w
+            if (br > aL && bx < aR) {
+                paint.color = DrawUtils.adjustAlpha(0, 35); paint.style = Paint.Style.FILL
+                canvas.drawRoundRect(bx + 2f, by + 3f, br + 2f, by + BTN_H + 3f, 12f, 12f, paint)
+                val bg = when (btn.label) { "Delete" -> Theme.DANGER_DIM; "Rename" -> Theme.PURPLE_DIM; else -> Theme.BG_SURFACE3 }
+                DrawUtils.drawRoundRect(canvas, paint, bx, by, br, by + BTN_H, 12f, bg)
+                paint.color = btn.color; paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.5f
+                canvas.drawRoundRect(bx, by, br, by + BTN_H, 12f, 12f, paint)
+                drawBtnIcon(canvas, btn.icon, bx + 22f, by + BTN_H / 2f, btn.color)
+                DrawUtils.drawText(canvas, paint, btn.label, bx + 38f, by + BTN_H / 2f + 9f,
+                    btn.color, 21f, typeface = android.graphics.Typeface.DEFAULT_BOLD)
             }
+            bx += btn.w + BTN_PAD
+        }
+        canvas.restore()
+        // Scroll indicator dots
+        val availW = aR - aL
+        if (totalBtnW > availW) {
+            val dotCount = buildButtons().size; val dotY = b - 8f
+            var dotX = left + width / 2f - dotCount * 6f
+            val maxScroll = (totalBtnW - availW).coerceAtLeast(1f)
+            val activeDot = ((btnScrollX / maxScroll) * (dotCount - 1)).toInt().coerceIn(0, dotCount - 1)
+            for (i in 0 until dotCount) {
+                paint.color = if (i == activeDot) Theme.ACCENT else Theme.TEXT_MUTED
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(dotX, dotY, if (i == activeDot) 3.5f else 2.5f, paint)
+                dotX += 12f
+            }
+        }
+    }
 
-            DrawUtils.drawText(canvas, paint, btn.label,
-                bx + 36f, by + btnH / 2f + 9f,
-                btn.color, 22f, typeface = Typeface.DEFAULT_BOLD)
+    private fun drawBtnIcon(canvas: Canvas, icon: Int, cx: Float, cy: Float, color: Int) {
+        paint.color = color; paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2.5f; paint.strokeCap = Paint.Cap.ROUND
+        when (icon) {
+            0 -> { canvas.drawRoundRect(cx-7f,cy-8f,cx+5f,cy+6f,2f,2f,paint); canvas.drawRoundRect(cx-3f,cy-12f,cx+9f,cy+2f,2f,2f,paint) }
+            1 -> { canvas.drawLine(cx-6f,cy-8f,cx+7f,cy+6f,paint); canvas.drawLine(cx+7f,cy-8f,cx-6f,cy+6f,paint) }
+            2 -> { canvas.drawLine(cx-8f,cy-6f,cx+8f,cy-6f,paint); canvas.drawRect(cx-6f,cy-4f,cx+6f,cy+8f,paint); canvas.drawLine(cx-2f,cy-1f,cx-2f,cy+5f,paint); canvas.drawLine(cx+2f,cy-1f,cx+2f,cy+5f,paint) }
+            3 -> { path.reset(); path.moveTo(cx-7f,cy+7f); path.lineTo(cx-3f,cy-6f); path.lineTo(cx+7f,cy+4f); path.close(); canvas.drawPath(path, paint) }
+            4 -> { canvas.drawRoundRect(cx-8f,cy-2f,cx+8f,cy+8f,2f,2f,paint); canvas.drawLine(cx-8f,cy-2f,cx-8f,cy-7f,paint); canvas.drawLine(cx+8f,cy-2f,cx+8f,cy-7f,paint); canvas.drawLine(cx-10f,cy-7f,cx+10f,cy-7f,paint); canvas.drawLine(cx-3f,cy+2f,cx+3f,cy+2f,paint) }
+            5 -> { canvas.drawRect(cx-9f,cy-9f,cx-1f,cy-1f,paint); canvas.drawRect(cx+1f,cy-9f,cx+9f,cy-1f,paint); canvas.drawRect(cx-9f,cy+1f,cx-1f,cy+9f,paint); canvas.drawRect(cx+1f,cy+1f,cx+9f,cy+9f,paint) }
+        }
+    }
 
-            bx += btnW + gap
+    fun onTouchDown(x: Float, y: Float) { btnDownX = x; btnScrollStart = btnScrollX; btnDragging = false }
+    fun onTouchMove(x: Float, y: Float) {
+        val dx = btnDownX - x
+        if (!btnDragging && abs(dx) > 12f) btnDragging = true
+        if (btnDragging) {
+            val availW = width - LABEL_W - CLOSE_W
+            btnScrollX = (btnScrollStart + dx).coerceIn(0f, (totalBtnW - availW).coerceAtLeast(0f))
         }
     }
 
     fun onTouchUp(x: Float, y: Float): Boolean {
-        if (!visible) return false
-        buttons.forEach { btn ->
-            if (btn.bounds.contains(x, y)) {
+        if (btnDragging) { btnDragging = false; return true }
+        val r = left + width; val cy = top + height / 2f; val closeX = r - CLOSE_W / 2f
+        if (abs(x - closeX) < 30f && abs(y - cy) < 30f) { onDeselect(); return true }
+        val aL = left + LABEL_W; val buttons = buildButtons()
+        var bx = aL - btnScrollX; val by = top + (height - BTN_H) / 2f
+        for (btn in buttons) {
+            val br = bx + btn.w
+            if (x >= bx && x <= br && y >= by && y <= by + BTN_H) {
                 when (btn.label) {
-                    "Copy"   -> onCopy(selectedFiles)
-                    "Move"   -> onMove(selectedFiles)
-                    "Delete" -> onDelete(selectedFiles)
-                    "None"   -> onDeselect()
+                    "Copy"    -> onCopy(selected)
+                    "Cut"     -> onMove(selected)
+                    "Delete"  -> onDelete(selected)
+                    "Rename"  -> if (selected.size == 1) onRename(selected[0])
+                    "Archive" -> onArchive(selected)
+                    "All"     -> onSelectAll()
                 }
                 return true
             }
+            bx += btn.w + BTN_PAD
         }
         return false
     }
 
-    fun contains(x: Float, y: Float) =
-        visible && x in left..(left + width) && y in top..(top + height)
-
-    // ── Icon drawers ──────────────────────────────────────────────────────────
-
-    private fun drawCopyIcon(canvas: Canvas, x: Float, y: Float) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2f
-        paint.color = Theme.ACCENT
-        canvas.drawRoundRect(x - 6f, y - 6f, x + 4f, y + 6f, 2f, 2f, paint)
-        canvas.drawRoundRect(x - 2f, y - 9f, x + 8f, y + 3f, 2f, 2f, paint)
-    }
-
-    private fun drawMoveIcon(canvas: Canvas, x: Float, y: Float) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2.5f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = Theme.WARNING
-        canvas.drawLine(x - 7f, y, x + 4f, y, paint)
-        path.reset()
-        path.moveTo(x + 1f, y - 5f)
-        path.lineTo(x + 7f, y)
-        path.lineTo(x + 1f, y + 5f)
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawDeleteIcon(canvas: Canvas, x: Float, y: Float) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2.5f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = Theme.DANGER
-        canvas.drawLine(x - 6f, y - 6f, x + 6f, y + 6f, paint)
-        canvas.drawLine(x + 6f, y - 6f, x - 6f, y + 6f, paint)
-    }
-
-    private fun drawCloseIcon(canvas: Canvas, x: Float, y: Float) {
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 2f
-        paint.color = Theme.TEXT_MUTED
-        canvas.drawRoundRect(x - 7f, y - 7f, x + 7f, y + 7f, 3f, 3f, paint)
-        canvas.drawLine(x - 3f, y, x + 3f, y, paint)
-    }
+    fun contains(x: Float, y: Float) = visible && x in left..(left + width) && y in top..(top + height)
 }
